@@ -68,7 +68,7 @@ jobs:
       - name: 释放构建机磁盘空间
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
-          sudo rm -rf /usr/local/lib/android/sdk/ndk /usr/local/lib/android/sdk/emulator
+          sudo rm -rf /usr/local/lib/android/sdk/emulator
           sudo rm -rf /usr/local/lib/android/sdk/system-images
           sudo apt-get clean
           df -h /
