@@ -70,7 +70,7 @@ class VideoEnhancementAssets {
     File? previous;
     try {
       await temporary.writeAsBytes(bytes, flush: true);
-      if (Platform.isWindows && await destination.exists()) {
+      if (await destination.exists()) {
         previous = await destination.rename('${temporary.path}.previous');
       }
       await temporary.rename(destination.path);

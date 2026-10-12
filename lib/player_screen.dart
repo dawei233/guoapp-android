@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:window_manager/window_manager.dart';
 
 import 'app_layout.dart';
 import 'app_orientation.dart';
@@ -1177,9 +1176,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _automaticFullscreenSuppressed = !fullscreen;
     });
     try {
-      if (Platform.isWindows) {
-        await windowManager.setFullScreen(fullscreen);
-      } else if (_mobile) {
+      if (_mobile) {
         await (_orientationController?.setPlayback(
               this,
               fullscreen: fullscreen,
@@ -1545,9 +1542,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         await _player.dispose();
       }),
     );
-    if (Platform.isWindows) {
-      unawaited(windowManager.setFullScreen(false));
-    } else if (_mobile || _television && Platform.isAndroid) {
+    if (_mobile || _television && Platform.isAndroid) {
       unawaited(
         (_orientationController?.releasePlayback(this) ??
                 SystemChrome.setPreferredOrientations(

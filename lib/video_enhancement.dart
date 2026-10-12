@@ -24,9 +24,10 @@ class VideoEnhancementController extends ChangeNotifier {
   }) : _preferences = preferences,
        _animationHint = videoHasAnimationTags(category, tags) {
     final native = player.platform;
-    supported = video != null && native is NativePlayer && Platform.isWindows;
+    // 画质增强依赖 mpv + D3D11VA，仅 Windows 可用；本仓只维护 Android，恒为不支持。
+    supported = false;
     if (!supported) {
-      _status = '当前平台暂不支持画质增强';
+      _status = '当前版本暂不支持画质增强';
       return;
     }
     _mpv = VideoEnhancementMpv(native as NativePlayer);
@@ -450,7 +451,6 @@ class VideoEnhancementController extends ChangeNotifier {
       }
     }
     _hardware =
-        Platform.isWindows &&
         _gpu &&
         recentMpv &&
         (_vendor == 'nvidia' || _vendor == 'intel') &&

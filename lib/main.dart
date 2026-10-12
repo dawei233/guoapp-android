@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:window_manager/window_manager.dart';
 
 import 'core_bridge.dart';
 import 'app_layout.dart';
@@ -17,28 +16,18 @@ import 'home_screen.dart';
 import 'local_store.dart';
 import 'profiles_screen.dart';
 import 'media_library.dart';
-import 'package_smoke.dart';
 import 'lan_controller.dart';
 import 'player_screen.dart';
-import 'video_enhancement_assets.dart';
 import 'diary_service.dart';
 
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
-  DiaryService.add('[App] 应用启动，版本: 0.2.88+95, 平台: ${Platform.operatingSystem}');
+  DiaryService.add('[App] 应用启动，版本: 0.3.0+1, 平台: ${Platform.operatingSystem}');
   if (Platform.isAndroid) {
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(AppTheme.systemBars(Brightness.dark));
   }
-  if (Platform.isWindows) {
-    await windowManager.ensureInitialized();
-  }
   MediaKit.ensureInitialized();
-  VideoEnhancementAssets.registerLicenses();
-  if (Platform.isWindows && arguments.firstOrNull == '--package-smoke') {
-    await runPackageSmoke(arguments);
-    return;
-  }
   final device = await AppDevice.detect();
   runApp(AppBootstrap(device: device));
 }
@@ -139,8 +128,6 @@ class _AppBootstrapState extends State<AppBootstrap>
             store!,
             kind: device.television
                 ? 'tv'
-                : Platform.isWindows
-                ? 'computer'
                 : 'phone',
           );
           LanController.current = link;

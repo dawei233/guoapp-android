@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
@@ -92,19 +91,14 @@ String _derivePin(String pin, String salt) {
 }
 
 Future<String> hashProfilePin(String pin, String salt) async {
-  // [红果漫剧补丁] Windows 上 Isolate.run 在 release 构建可能失败/挂起，
-  // 导致「用密码解锁」永远校验不过（表现为输入正确密码也没反应）。
-  // 桌面端改用 compute（同样在后台 isolate，但走 Flutter 官方通道，Windows 稳定）；
+  // compute 走 Flutter 官方 isolate 通道，比 Isolate.run 在 release 构建更稳定；
   // 若仍失败则退回当前 isolate 直接计算（120k 轮约 1-3 秒，可接受）。
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    try {
-      return await compute(_derivePinEntry, _PinInput(pin, salt))
-          .timeout(const Duration(seconds: 30));
-    } catch (_) {
-      return _derivePin(pin, salt);
-    }
+  try {
+    return await compute(_derivePinEntry, _PinInput(pin, salt))
+        .timeout(const Duration(seconds: 30));
+  } catch (_) {
+    return _derivePin(pin, salt);
   }
-  return Isolate.run(() => _derivePin(pin, salt));
 }
 
 /// compute 的入参（必须可跨 isolate 传递）
