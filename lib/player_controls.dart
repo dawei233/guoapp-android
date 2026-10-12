@@ -347,11 +347,12 @@ class _PlayerControlsState extends State<PlayerControls> {
               )
             else
               const Spacer(),
-            if (compact)
+            if (widget.onPictureInPicture != null)
               _overlayIconButton(
-                tooltip: '旋转与全屏',
-                onPressed: widget.onFullscreen,
-                icon: Icons.screen_rotation_alt_rounded,
+                buttonKey: const ValueKey('player-picture-in-picture'),
+                tooltip: '画中画',
+                onPressed: widget.enabled ? widget.onPictureInPicture : null,
+                icon: Icons.picture_in_picture_alt_rounded,
               ),
           ],
         ),
@@ -360,6 +361,7 @@ class _PlayerControlsState extends State<PlayerControls> {
   }
 
   Widget _overlayIconButton({
+    Key? buttonKey,
     required String tooltip,
     required VoidCallback? onPressed,
     required IconData icon,
@@ -371,6 +373,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         borderRadius: BorderRadius.circular(22),
       ),
       child: IconButton(
+        key: buttonKey,
         tooltip: tooltip,
         constraints: const BoxConstraints.tightFor(width: 42, height: 42),
         padding: EdgeInsets.zero,
@@ -835,15 +838,14 @@ class _PlayerControlsState extends State<PlayerControls> {
           icon: Icons.grid_view_rounded,
           onPressed: widget.enabled ? () => _panel(widget.onEpisodes) : null,
         ),
-      if (widget.onPictureInPicture != null)
-        _toolIcon(
-          key: const ValueKey('player-picture-in-picture'),
-          tooltip: '画中画',
-          icon: Icons.picture_in_picture_alt_rounded,
-          onPressed: widget.enabled
-              ? () => _panel(widget.onPictureInPicture!)
-              : null,
-        ),
+      _toolIcon(
+        key: const ValueKey('player-fullscreen'),
+        tooltip: fullscreen ? '退出全屏' : '全屏',
+        icon: fullscreen
+            ? Icons.fullscreen_exit_rounded
+            : Icons.fullscreen_rounded,
+        onPressed: widget.enabled ? widget.onFullscreen : null,
+      ),
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(2, 0, 2, 0),
@@ -992,16 +994,25 @@ class _PlayerControlsState extends State<PlayerControls> {
     builder: (context, _) {
       final hud = widget.interactions.hudState;
       final feedback = widget.interactions.feedback;
-      if (hud.type == SwipeAction.brightness) {
+      if (hud.type == SwipeAction.brightness ||
+          hud.type == SwipeAction.volume) {
+        final volumeMode = hud.type == SwipeAction.volume;
         final value = hud.value.clamp(0.0, 1.0);
         final percent = (value * 100).round();
-        final icon = value < 0.33
+        final icon = volumeMode
+            ? (value < 0.01
+                  ? Icons.volume_off_rounded
+                  : value < 0.5
+                  ? Icons.volume_down_rounded
+                  : Icons.volume_up_rounded)
+            : value < 0.33
             ? Icons.brightness_low_rounded
             : value < 0.66
-                ? Icons.brightness_medium_rounded
-                : Icons.brightness_high_rounded;
+            ? Icons.brightness_medium_rounded
+            : Icons.brightness_high_rounded;
         return IgnorePointer(
-          child: Center(
+          child: Align(
+            alignment: Alignment(volumeMode ? .72 : -.72, 0),
             child: Container(
               width: 120,
               padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
@@ -1036,7 +1047,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    '亮度 $percent%',
+                    '${volumeMode ? '音量' : '亮度'} $percent%',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,

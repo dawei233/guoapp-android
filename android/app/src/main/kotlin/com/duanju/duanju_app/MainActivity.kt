@@ -259,9 +259,9 @@ class MainActivity : FlutterActivity() {
                 right > left && bottom > top) {
                 builder.setSourceRectHint(Rect(left, top, right, bottom))
             }
-            // [红果漫剧补丁] 不再设 setAutoEnterEnabled(true)：它让系统在【任何离开 App
-            // 的动作】时自动把小窗弹出（HyperOS 上全屏手势边缘滑动被误判 → 播放中突然
-            // 变左侧小窗）。PiP 只应响应用户显式点击 PiP 按钮，故此处用一次性进入。
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                builder.setAutoEnterEnabled(true)
+            }
             val entered = enterPictureInPictureMode(builder.build())
             pictureInPictureStatus() + ("requested" to entered)
         }.getOrElse { pictureInPictureStatus() }

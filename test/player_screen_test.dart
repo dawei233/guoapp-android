@@ -243,8 +243,53 @@ void main() {
         find.byKey(const ValueKey('player-picture-in-picture')),
       );
       expect(quality.left - speed.right, lessThan(8));
-      expect(pip.left - quality.right, lessThan(8));
       expect(pip.right, greaterThan(330));
+      expect(pip.top, lessThan(speed.top));
+      await unmount(tester, player);
+    } finally {
+      messenger.setMockMethodCallHandler(AppDevice.channel, null);
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('right-edge swipe adjusts volume without touching brightness', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var brightnessWrites = 0;
+    messenger.setMockMethodCallHandler(AppDevice.channel, (call) async {
+      switch (call.method) {
+        case 'pictureInPictureStatus':
+          return {'supported': true, 'active': false};
+        case 'getBrightness':
+          return 0.5;
+        case 'setBrightness':
+          brightnessWrites += 1;
+          return null;
+      }
+      return null;
+    });
+    try {
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      await mount(tester, repository, player, size: const Size(390, 844));
+      final surface = tester.getRect(
+        find.byKey(const ValueKey('player-gesture-surface')),
+      );
+      final start = Offset(
+        surface.right - surface.width * .1,
+        surface.center.dy,
+      );
+      final gesture = await tester.startGesture(start);
+      await tester.pump();
+      await gesture.moveBy(const Offset(0, -160));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+      expect(player.state.volume, greaterThan(0));
+      expect(brightnessWrites, 0);
       await unmount(tester, player);
     } finally {
       messenger.setMockMethodCallHandler(AppDevice.channel, null);

@@ -9,7 +9,7 @@ import 'package:media_kit/media_kit.dart';
 import 'app_layout.dart';
 import 'widgets.dart';
 
-enum SwipeAction { none, brightness, episode }
+enum SwipeAction { none, brightness, volume, episode }
 
 class GestureHudState {
   const GestureHudState({
@@ -72,6 +72,7 @@ class PlayerInteractions extends ChangeNotifier {
   GestureHudState _hudState = const GestureHudState();
   double _brightness = 0.5;
   double _initialBrightness = 0.5;
+  double _initialVolume = 0;
   double _viewWidth = 0.0;
   double _viewHeight = 0.0;
   Timer? _hudTimer;
@@ -193,9 +194,10 @@ class PlayerInteractions extends ChangeNotifier {
 
     if (_swipeEnabled && width > 0) {
       // 判定触摸落点：
-      // 左侧 35% 区域 -> 呼出并拉动红果风格亮度条
-      // 其余区域 -> 刷剧切集，绝对不调节音量
-      if (event.localPosition.dx < width * 0.35) {
+      // 左侧 20% 区域 -> 呼出并拉动红果风格亮度条
+      // 右侧 20% 区域 -> 音量
+      // 其余区域 -> 刷剧切集，绝不误触亮度和音量
+      if (event.localPosition.dx < width * 0.2) {
         _swipeAction = SwipeAction.brightness;
         AppDevice.getBrightness().then((val) {
           if (_pointer == event.pointer) {
@@ -203,6 +205,10 @@ class PlayerInteractions extends ChangeNotifier {
             _showHud(SwipeAction.brightness, _brightness);
           }
         });
+      } else if (event.localPosition.dx > width * 0.8) {
+        _swipeAction = SwipeAction.volume;
+        _initialVolume = player.state.volume;
+        _showHud(SwipeAction.volume, _initialVolume / 100);
       } else {
         _swipeAction = SwipeAction.episode;
       }
@@ -227,6 +233,10 @@ class PlayerInteractions extends ChangeNotifier {
       _brightness = (_initialBrightness + deltaRatio).clamp(0.01, 1.0);
       AppDevice.setBrightness(_brightness);
       _showHud(SwipeAction.brightness, _brightness);
+    } else if (_swipeAction == SwipeAction.volume) {
+      final volume = (_initialVolume + deltaRatio * 100).clamp(0.0, 100.0);
+      unawaited(player.setVolume(volume));
+      _showHud(SwipeAction.volume, volume / 100);
     }
   }
 
@@ -248,7 +258,8 @@ class PlayerInteractions extends ChangeNotifier {
         isVertical &&
         event.timeStamp - _started < const Duration(milliseconds: 1500)) {
       if (available()) hint(onEpisode(delta.dy < 0 ? 1 : -1));
-    } else if (_swipeAction == SwipeAction.brightness) {
+    } else if (_swipeAction == SwipeAction.brightness ||
+        _swipeAction == SwipeAction.volume) {
       _scheduleDismissHud();
     }
 

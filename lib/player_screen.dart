@@ -1623,9 +1623,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                     ),
                     actions: [
                       IconButton(
-                        tooltip: '旋转与全屏',
+                        tooltip: '全屏',
                         onPressed: _rotate,
-                        icon: const Icon(Icons.screen_rotation_alt_rounded),
+                        icon: const Icon(Icons.fullscreen_rounded),
                       ),
                     ],
                   ),
