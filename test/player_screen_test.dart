@@ -284,11 +284,11 @@ void main() {
       );
       final gesture = await tester.startGesture(start);
       await tester.pump();
-      await gesture.moveBy(const Offset(0, -160));
+      await gesture.moveBy(const Offset(0, 160));
       await tester.pump();
       await gesture.up();
       await tester.pump();
-      expect(player.state.volume, greaterThan(0));
+      expect(player.state.volume, lessThan(100));
       expect(brightnessWrites, 0);
       await unmount(tester, player);
     } finally {
