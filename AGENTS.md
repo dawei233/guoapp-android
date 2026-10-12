@@ -6,6 +6,10 @@
 
 本仓库只维护 Android。原多端仓库 `dawei233/guoapp` 已冻结存档，Windows / iOS 实现与 0.2.x 历史版本保留在那里，不再在本仓库维护或构建。
 
+## 上游同步
+
+上游仓库为 `zhoufuweigg/guoapp`（https://github.com/zhoufuweigg/guoapp），本仓库是其 Android 拆分版。上游有新版本（新站源、修复等）时，从上游拉取并只把 Android 相关内容合入本仓库；不要带回上游的 Windows / iOS 构建面与平台分支。合入后递增版本号并按任务收尾同步流程执行。
+
 ## 优先级与交付
 
 1. Android 手机为第一优先级。
