@@ -296,4 +296,50 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     }
   });
+
+  testWidgets('edge touch only triggers after a deliberate vertical drag', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var brightnessWrites = 0;
+    messenger.setMockMethodCallHandler(AppDevice.channel, (call) async {
+      switch (call.method) {
+        case 'pictureInPictureStatus':
+          return {'supported': true, 'active': false};
+        case 'getBrightness':
+          return 0.5;
+        case 'setBrightness':
+          brightnessWrites += 1;
+          return null;
+      }
+      return null;
+    });
+    try {
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      await mount(tester, repository, player, size: const Size(390, 844));
+      final surface = tester.getRect(
+        find.byKey(const ValueKey('player-gesture-surface')),
+      );
+      final start = Offset(
+        surface.left + surface.width * .1,
+        surface.center.dy,
+      );
+      final gesture = await tester.startGesture(start);
+      await tester.pump();
+      await gesture.moveBy(const Offset(120, 0));
+      await tester.pump();
+      expect(brightnessWrites, 0);
+      expect(find.textContaining('亮度'), findsNothing);
+      await gesture.up();
+      await tester.pump();
+      expect(brightnessWrites, 0);
+      await unmount(tester, player);
+    } finally {
+      messenger.setMockMethodCallHandler(AppDevice.channel, null);
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 }

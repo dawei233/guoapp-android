@@ -73,6 +73,8 @@ class PlayerInteractions extends ChangeNotifier {
   double _brightness = 0.5;
   double _initialBrightness = 0.5;
   double _initialVolume = 0;
+  bool _sideLocked = false;
+  double _sideTrigger = 30;
   double _viewWidth = 0.0;
   double _viewHeight = 0.0;
   Timer? _hudTimer;
@@ -166,6 +168,8 @@ class PlayerInteractions extends ChangeNotifier {
     _pointer = null;
     _origin = null;
     _lastPosition = null;
+    _sideLocked = false;
+    _swipeAction = SwipeAction.none;
     _endHold(silent: true);
     hint('');
   }
@@ -187,28 +191,28 @@ class PlayerInteractions extends ChangeNotifier {
     _started = event.timeStamp;
     _swipeEnabled = swipeEnabled && event.kind == PointerDeviceKind.touch;
     _swipeThreshold = math.max(30, math.min(80, height * .08));
+    _sideTrigger = math.max(18, math.min(48, height * .05));
     _viewWidth = width;
     _viewHeight = height;
     _moved = _held = false;
+    _sideLocked = false;
     _swipeAction = SwipeAction.none;
 
     if (_swipeEnabled && width > 0) {
-      // 判定触摸落点：
-      // 左侧 20% 区域 -> 呼出并拉动红果风格亮度条
-      // 右侧 20% 区域 -> 音量
-      // 其余区域 -> 刷剧切集，绝不误触亮度和音量
+      // 落点只决定候选动作，不立即触发：
+      // 左侧 20% -> 亮度，右侧 20% -> 音量，其余 -> 切集。
+      // 亮度/音量必须再满足「纵向位移占优且超过阈值」才锁定生效，避免一碰就误触。
       if (event.localPosition.dx < width * 0.2) {
         _swipeAction = SwipeAction.brightness;
+        _initialBrightness = _brightness;
         AppDevice.getBrightness().then((val) {
-          if (_pointer == event.pointer) {
+          if (_pointer == event.pointer && !_sideLocked) {
             _initialBrightness = _brightness = val;
-            _showHud(SwipeAction.brightness, _brightness);
           }
         });
       } else if (event.localPosition.dx > width * 0.8) {
         _swipeAction = SwipeAction.volume;
         _initialVolume = player.state.volume;
-        _showHud(SwipeAction.volume, _initialVolume / 100);
       } else {
         _swipeAction = SwipeAction.episode;
       }
@@ -225,6 +229,13 @@ class PlayerInteractions extends ChangeNotifier {
       _endHold();
     }
     if (!_swipeEnabled || !_moved || _viewHeight <= 0) return;
+    if (_swipeAction == SwipeAction.episode) return;
+
+    if (!_sideLocked) {
+      // 纵向位移必须占优且超过阈值，才把候选动作锁定为亮度/音量。
+      if (diff.dy.abs() < _sideTrigger || diff.dy.abs() <= diff.dx.abs()) return;
+      _sideLocked = true;
+    }
 
     final dy = _origin!.dy - event.localPosition.dy; // 向上滑动为增加，向下滑动为减少
     final deltaRatio = dy / (_viewHeight * 0.6);
