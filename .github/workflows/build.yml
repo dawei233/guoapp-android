@@ -66,6 +66,8 @@ jobs:
             arguments: '--all-sources'
     steps:
       - uses: actions/checkout@v4
+      - name: 校验源码版本号一致
+        run: python3 scripts/sync_version.py --check
       - name: 释放构建机磁盘空间
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
