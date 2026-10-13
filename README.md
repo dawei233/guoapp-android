@@ -4,7 +4,7 @@
 
 Flutter 独立短剧 / 影视应用，原名「短剧库 APP」。站源请求、解析、下载和播放均在设备上完成，不依赖自建服务。当前源码版本：**0.3.0+1**。
 
-> 本仓库**只维护 Android**。原多端仓库 `dawei233/guoapp` 已冻结存档（含 Windows 完整实现与历史版本），后续仅在此仓库继续开发。
+> 本仓库是当前唯一维护的仓库，远程为 `dawei233/guoapp-android`（私有），**只维护 Android**。原多端仓库 `dawei233/guoapp` 已冻结存档（含 Windows 完整实现与历史版本），仅作参考、不再维护。
 >
 > 上游：[zhoufuweigg/guoapp](https://github.com/zhoufuweigg/guoapp)。上游发布新版本（新站源等）时从上游合入，本仓库只保留 Android 部分。
 
