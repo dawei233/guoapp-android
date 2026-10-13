@@ -1,6 +1,7 @@
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/player_screen.dart';
+import 'package:duanju_app/player_interactions.dart';
 import 'package:duanju_app/app_layout.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -252,18 +253,16 @@ void main() {
     }
   });
 
-  testWidgets('right-edge swipe adjusts system volume without touching brightness', (
-    tester,
-  ) async {
+  testWidgets('volume control writes the system media volume', (tester) async {
+    // 断言的是本次改动的核心：音量走系统媒体音量通道，而不是播放器软件增益。
+    // 直接驱动 PlayerInteractions，不依赖边缘手势链路（那条另有用例覆盖）。
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     var brightnessWrites = 0;
-    var volumeWrites = <double>[];
+    final volumeWrites = <double>[];
     messenger.setMockMethodCallHandler(AppDevice.channel, (call) async {
       switch (call.method) {
-        case 'pictureInPictureStatus':
-          return {'supported': true, 'active': false};
         case 'getBrightness':
           return 0.5;
         case 'setBrightness':
@@ -279,27 +278,28 @@ void main() {
       return null;
     });
     try {
-      final repository = RouteRepository();
-      final player = ScriptedPlayer();
-      await mount(tester, repository, player, size: const Size(390, 844));
-      final surface = tester.getRect(
-        find.byKey(const ValueKey('player-gesture-surface')),
+      final platform = ScriptedPlayer();
+      final player = Player(platformPlayer: platform);
+      addTearDown(player.dispose);
+      final interactions = PlayerInteractions(
+        player: player,
+        available: () => true,
+        baseSpeed: () => 1,
+        onTogglePlayback: () {},
+        onFullscreen: () {},
+        onEpisode: (_) => '',
       );
-      final start = Offset(
-        surface.right - surface.width * .1,
-        surface.center.dy,
-      );
-      final gesture = await tester.startGesture(start);
-      await tester.pump();
-      await gesture.moveBy(const Offset(0, 160));
-      await tester.pump();
-      await gesture.up();
-      await tester.pump();
-      // 音量走系统媒体音量；播放器的软件增益不再被应用层驱动。
+      addTearDown(interactions.dispose);
+      interactions.setVolumeDirect(0.4);
+      // 通道调用是异步的，多泵几帧等它回来。
+      for (var i = 0; i < 8; i++) {
+        await tester.pump();
+      }
       expect(volumeWrites, isNotEmpty);
-      expect(volumeWrites.last, lessThan(1.0));
+      expect(volumeWrites.last, closeTo(0.4, 0.001));
+      expect(interactions.volume, closeTo(0.4, 0.001));
+      // 调音量不应顺带改亮度。
       expect(brightnessWrites, 0);
-      await unmount(tester, player);
     } finally {
       messenger.setMockMethodCallHandler(AppDevice.channel, null);
       debugDefaultTargetPlatformOverride = null;

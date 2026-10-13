@@ -2,6 +2,10 @@ import 'video_enhancement_preferences.dart';
 
 const playbackSpeeds = [.5, .75, 1.0, 1.25, 1.5, 2.0, 3.0];
 
+/// 音量「尚未记录」的哨兵值。默认值必须与 fromJson 的兜底一致，
+/// 否则全新安装时默认对象与解析结果不一样，备份比对会判定为数据不一致。
+const unrecordedVolume = -1.0;
+
 class PlaybackPreferences {
   const PlaybackPreferences({
     this.speed = 1,
@@ -9,7 +13,7 @@ class PlaybackPreferences {
     this.autoAdvance = true,
     this.danmaku = true,
     this.preload = true,
-    this.volume = 1,
+    this.volume = unrecordedVolume,
     this.enhancement = const VideoEnhancementPreferences(),
   });
 
@@ -58,8 +62,8 @@ class PlaybackPreferences {
     final danmaku = value['danmaku'] as bool? ?? true;
     final preload = value['preload'] as bool? ?? true;
     // 负值代表"没有记录过"，由启动流程决定是否套用；其余值必须落在合法区间。
-    final rawVolume = (value['volume'] as num?)?.toDouble() ?? -1;
-    final volume = rawVolume < 0 ? -1.0 : rawVolume.clamp(0.0, 1.0);
+    final rawVolume = (value['volume'] as num?)?.toDouble() ?? unrecordedVolume;
+    final volume = rawVolume < 0 ? unrecordedVolume : rawVolume.clamp(0.0, 1.0);
     if (!playbackSpeeds.contains(speed) || quality < 0 || quality > 4320) {
       throw const FormatException('播放偏好无效');
     }

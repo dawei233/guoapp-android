@@ -48,7 +48,11 @@ class DanmakuPage {
       throw const FormatException('弹幕分集或时间范围不符');
     }
     final items = <DanmakuItem>[];
-    final seen = <String>{};
+    // 两道去重都要保留：
+    //  - seenId：同一批次里同一个 id 被重复使用（内容却不同）属于异常数据，沿用旧行为拒收；
+    //  - seenIdentity：上游会把同一条弹幕以不同 id 重复给出，这才是"大量重复"的根因。
+    final seenId = <String>{};
+    final seenIdentity = <String>{};
     for (final row in rows.take(90)) {
       if (row is! Map) continue;
       final id = row['id'], text = row['text'], time = row['timeMs'];
@@ -59,7 +63,7 @@ class DanmakuPage {
           time is! int ||
           time < startMs ||
           time >= next ||
-          seen.contains(id)) {
+          seenId.contains(id)) {
         continue;
       }
       final cleaned = text
@@ -71,7 +75,8 @@ class DanmakuPage {
         text: String.fromCharCodes(cleaned.runes.take(181)),
         timeMs: time,
       );
-      if (!seen.add(item.identity)) continue;
+      if (!seenIdentity.add(item.identity)) continue;
+      seenId.add(id);
       items.add(item);
     }
     items.sort((a, b) => a.timeMs.compareTo(b.timeMs));

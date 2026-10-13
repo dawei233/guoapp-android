@@ -385,6 +385,47 @@ void main() {
     expect(page.items.first.id, 'one');
   });
 
+  test('a reused id with different content is still rejected', () {
+    // 内容去重不能替代 id 唯一性检查：同一批次里同一个 id 配不同文本属于异常数据，
+    // 历史上就是拒收的。丢掉这道检查会让脏数据混进时间轴。
+    final page = DanmakuPage.fromJson(
+      <String, dynamic>{
+        'episodeId': '1001',
+        'startMs': 0,
+        'nextMs': 30000,
+        'items': [
+          {'id': 'literal', 'text': '<b>文字</b>\n第二行', 'timeMs': 0},
+          {'id': 'later', 'text': '下一条', 'timeMs': 15000},
+          {'id': 'literal', 'text': '重复', 'timeMs': 1},
+        ],
+      },
+      episodeId: '1001',
+      startMs: 0,
+      durationMs: 60000,
+    );
+    expect(page.items.map((item) => item.timeMs), [0, 15000]);
+    expect(page.items.first.text, '<b>文字</b> 第二行');
+  });
+
+  test('distinct content at the same timestamp both survive', () {
+    // 同一秒里两个人发不同的话，必须都保留 —— 去重只针对"同一时间点的同一句话"。
+    final page = DanmakuPage.fromJson(
+      <String, dynamic>{
+        'episodeId': '1001',
+        'startMs': 0,
+        'nextMs': 30000,
+        'items': [
+          {'id': 'a', 'text': '甲说的话', 'timeMs': 5000},
+          {'id': 'b', 'text': '乙说的话', 'timeMs': 5000},
+        ],
+      },
+      episodeId: '1001',
+      startMs: 0,
+      durationMs: 60000,
+    );
+    expect(page.items.length, 2);
+  });
+
   test('planDanmaku keeps widget keys unique while collapsing duplicate content', () {
     // 内容相同但 id 不同的两条会被内容去重；id 重复的两条必须被丢掉，
     // 否则渲染层的 ValueKey(item.id) 会撞车。
