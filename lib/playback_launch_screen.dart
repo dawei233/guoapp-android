@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'core_bridge.dart';
 import 'follow_state.dart';
@@ -14,6 +15,8 @@ Future<void> openPlaybackDirectly(
   required Drama drama,
   required AppRepository repository,
   required LocalStore store,
+  Player Function()? playerFactory,
+  Widget Function(Widget controls)? videoBuilder,
 }) async {
   final profileEpoch = store.profileEpoch;
   try {
@@ -82,6 +85,8 @@ Future<void> openPlaybackDirectly(
           initialPosition: position,
           repository: repository,
           store: store,
+          playerFactory: playerFactory,
+          videoBuilder: videoBuilder,
         ),
       ),
     );
@@ -104,11 +109,19 @@ class PlaybackLaunchScreen extends StatefulWidget {
     required this.drama,
     required this.repository,
     required this.store,
+    this.playerFactory,
+    this.videoBuilder,
   });
 
   final Drama drama;
   final AppRepository repository;
   final LocalStore store;
+
+  /// 测试注入假播放器用；透传给 PlayerScreen。
+  @visibleForTesting
+  final Player Function()? playerFactory;
+  @visibleForTesting
+  final Widget Function(Widget controls)? videoBuilder;
 
   @override
   State<PlaybackLaunchScreen> createState() => _PlaybackLaunchScreenState();
@@ -208,6 +221,8 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
             initialPosition: position,
             repository: widget.repository,
             store: widget.store,
+            playerFactory: widget.playerFactory,
+            videoBuilder: widget.videoBuilder,
           ),
         ),
       );

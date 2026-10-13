@@ -148,7 +148,9 @@ void main() {
         fixtureProbe(rate: 48000),
       ]);
       expect(audioOnly.videoTranscodes, 0);
-      expect(audioOnly.audioTranscodes, 1);
+      // 多数音轨为 aac 且存在不一致时，会把所有分集统一成 aac_low
+      // （canonicalAac），因此转码数量是全部而不是只有少数派。
+      expect(audioOnly.audioTranscodes, 3);
       final identical = MergePlan.create([fixtureProbe(), fixtureProbe()]);
       expect(identical.videoTranscodes, 0);
       expect(identical.audioTranscodes, 0);
@@ -163,7 +165,9 @@ void main() {
     ]);
     expect(plan.audio, isNotNull);
     expect(plan.videoTranscodes, 0);
-    expect(plan.audioTranscodes, 2);
+    // 同上：两条缺音轨的分集补静音后，主导音轨为 aac，触发 canonicalAac，
+    // 于是三集全部统一编码。
+    expect(plan.audioTranscodes, 3);
   });
 
   test(
@@ -233,7 +237,9 @@ void main() {
         await expectLater(
           library.merge(jobs),
           throwsA(
-            predicate((Object error) => error.toString().contains('已取消')),
+            // 取消时的用户可见文案已改为说明"已保留什么"，
+            // 不再是一句笼统的「已取消」。
+            predicate((Object error) => error.toString().contains('已停止')),
           ),
         );
         expect(executor.commands, isEmpty);

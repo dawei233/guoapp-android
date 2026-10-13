@@ -325,23 +325,57 @@ void main() {
       ),
     );
     await tick(tester);
-    await tester.tap(find.byKey(const ValueKey('pause-1')));
-    await tick(tester);
+    // 下载页已改为「合集折叠 + 合集内分集」结构：分集项默认不渲染，
+    // 必须先在合集标题上点开。单集操作也收进了分集右侧的下拉菜单
+    // （tooltip「分集操作」），不再有 pause-1 / resume-1 / remove-2 这类 key。
+    Future<void> expandCollection() async {
+      // 合集标题在任何状态下都存在，不能拿它判断是否已展开 —— 那样第二次
+      // 调用会把刚展开的合集又收起来。改看该合集下是否有分集项渲染。
+      // 注意不能只认某个固定 id：被筛选隐藏的分集同样不会出现。
+      final rendered = tester.allWidgets.any(
+        (widget) =>
+            widget.key is ValueKey &&
+            widget.key.toString().contains('download-task-'),
+      );
+      if (!rendered) {
+        await tester.tap(find.text(FixtureRepository.free.title).first);
+        await tester.pumpAndSettle();
+      }
+    }
+
+    Future<void> tapJobAction(int id, String label) async {
+      await expandCollection();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(ValueKey('download-task-$id')),
+          matching: find.byTooltip('分集操作'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label).last);
+      await tester.pumpAndSettle();
+    }
+
+    await tapJobAction(1, '暂停');
     expect(repository.commands, ['pause:1']);
-    await tester.tap(find.byKey(const ValueKey('resume-1')));
-    await tick(tester);
+    await tapJobAction(1, '继续 / 重试');
     expect(repository.commands.last, 'resume:1');
-    await tester.tap(find.text('已下载').first);
-    await tick(tester);
-    expect(find.byKey(const ValueKey('download-task-1')), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('remove-2')));
+    // 筛选已收进弹窗（tooltip「筛选下载合集」），选项为 ChoiceChip。
+    await tester.tap(find.byTooltip('筛选下载合集'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('已下载').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('应用'));
+    await tester.pumpAndSettle();
+    await tick(tester);
+    await expandCollection();
+    expect(find.byKey(const ValueKey('download-task-1')), findsNothing);
+    await tapJobAction(2, '删除视频');
     await tester.tap(find.text('保留'));
     await tester.pumpAndSettle();
     expect(repository.commands, isNot(contains('remove:2')));
-    await tester.tap(find.byKey(const ValueKey('remove-2')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('删除'));
+    await tapJobAction(2, '删除视频');
+    await tester.tap(find.text('确认删除'));
     await tester.pumpAndSettle();
     expect(repository.commands.last, 'remove:2');
     expect(find.text('暂无符合条件的任务'), findsOneWidget);
@@ -384,7 +418,18 @@ void main() {
         ),
       );
       await tick(tester);
-      await tester.tap(find.byKey(const ValueKey('local-play-3')));
+      // 本地播放入口已收进分集项的下拉菜单（tooltip「分集操作」）。
+      // 分集项在合集折叠内，需先展开合集。
+      await tester.tap(find.text(FixtureRepository.free.title).first);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('download-task-3')),
+          matching: find.byTooltip('分集操作'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('本地播放').last);
       await tester.pumpAndSettle();
       expect(find.text('offline player'), findsOneWidget);
       expect(repository.detailCalls, 0);
@@ -491,6 +536,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       focusRemote(tester, find.byKey(const ValueKey('tv-nav-3')));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      // 下载页是「合集折叠 + 合集内分集」结构，分集项默认不渲染，
+      // 先用遥控展开合集再聚焦分集。
+      focusRemote(tester, find.text(FixtureRepository.free.title).first);
       await tester.pumpAndSettle();
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pumpAndSettle();

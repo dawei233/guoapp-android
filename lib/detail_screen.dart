@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'app_layout.dart';
 import 'core_bridge.dart';
@@ -27,12 +28,20 @@ class DetailScreen extends StatefulWidget {
     required this.store,
     this.resumeOnOpen = false,
     this.downloadOnOpen = false,
+    this.playerFactory,
+    this.videoBuilder,
   });
   final Drama drama;
   final AppRepository repository;
   final LocalStore store;
   final bool resumeOnOpen;
   final bool downloadOnOpen;
+
+  /// 测试注入假播放器用；透传给 PlayerScreen。
+  @visibleForTesting
+  final Player Function()? playerFactory;
+  @visibleForTesting
+  final Widget Function(Widget controls)? videoBuilder;
   @override
   State<DetailScreen> createState() => _DetailScreenState();
 }
@@ -280,6 +289,8 @@ class _DetailScreenState extends State<DetailScreen> {
           initialPosition: position,
           repository: widget.repository,
           store: widget.store,
+          playerFactory: widget.playerFactory,
+          videoBuilder: widget.videoBuilder,
         ),
       ),
     );

@@ -65,14 +65,20 @@ void main() {
       final backup = await store.exportBackup();
       final library =
           (jsonDecode(backup)['libraries'] as Map)['default'] as Map;
-      expect((library['favorites'] as List).map((row) => (row as Map)['id']), [
-        other.id,
-      ]);
+      // 导出读的是原始磁盘记录（exportBackup 不做版本过滤），
+      // 受限站源 other(huangdou) 依旧保留在导出里。
+      expect(
+        (library['favorites'] as List).map((row) => (row as Map)['id']),
+        contains(other.id),
+      );
       expect(library['history'], hasLength(2));
       await store.importBackup(backup);
       expect(store.preferences.getString('source'), 'huangdou');
       expect(store.history, hasLength(allSourcesEnabled ? 2 : 1));
-      expect(store.favorites.map((drama) => drama.id), [other.id]);
+      // 内存里的 favorites 会按当前版本可见站源过滤，两者语义不同。
+      expect(store.favorites.map((drama) => drama.id), [
+        if (allSourcesEnabled) other.id,
+      ]);
       store.dispose();
     },
   );

@@ -248,14 +248,25 @@ class _RemoteGridState extends State<RemoteGrid> {
     if (node.context != null) {
       node.requestFocus();
       _target = null;
-    } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && generation == _generation && node.context != null) {
-          node.requestFocus();
-          _target = null;
-        }
-      });
+      return;
     }
+    // 目标项可能还没被构建：向上/向下滚动走的是 180ms 的 animateTo，而
+    // 懒构建的 SliverGrid 要等滚到附近才会挂载该节点。只重试一帧会在这时
+    // 拿到 hasContext=false 并静默放弃，自动定位（如"定位到当前集"）就失效。
+    // 因此按帧重试，直到节点就绪、generation 变化或到达上限。
+    var attempts = 0;
+    void retry(Duration _) {
+      if (!mounted || generation != _generation) return;
+      if (node.context != null) {
+        node.requestFocus();
+        _target = null;
+        return;
+      }
+      if (++attempts >= 60) return;
+      WidgetsBinding.instance.addPostFrameCallback(retry);
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback(retry);
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {

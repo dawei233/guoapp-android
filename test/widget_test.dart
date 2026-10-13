@@ -2,13 +2,32 @@ import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/main.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/app_build.dart';
+import 'package:duanju_app/core_bridge.dart';
+import 'package:duanju_app/detail_screen.dart';
+import 'package:duanju_app/remote_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fixtures.dart';
+import 'player_fixtures.dart';
 
 void main() {
+  // DuanjuApp 会一路构造到 PlayerScreen；测试环境必须注入假播放器，
+  // 否则会创建 media_kit 原生播放器（需要 libmpv，测试环境没有）。
+  DuanjuApp app(
+    AppRepository repository, {
+    LocalStore? store,
+    bool television = false,
+  }) => DuanjuApp(
+    repository: repository,
+    store: store,
+    television: television,
+    playerFactory: () => Player(platformPlayer: ScriptedPlayer()),
+    videoBuilder: (controls) => controls,
+  );
+
   Future<LocalStore> store() async {
     SharedPreferences.setMockInitialValues({});
     return LocalStore(await SharedPreferences.getInstance());
@@ -24,7 +43,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final repository = FixtureRepository();
       final local = await store();
-      await tester.pumpWidget(DuanjuApp(repository: repository, store: local));
+      await tester.pumpWidget(app(repository, store: local));
       await tester.pumpAndSettle();
       expect(find.byTooltip('VIP：隐藏'), findsNothing);
       expect(find.text('测试短剧'), findsOneWidget);
@@ -47,9 +66,31 @@ void main() {
       expect(find.text('会员测试剧'), findsNothing);
       await tester.tap(find.text('测试短剧'));
       await tester.pumpAndSettle();
+      // README:33 记录的行为是「普通点剧直接进入播放」，不再先开详情页。
       expect(repository.detailCalls, 1);
+      expect(find.byTooltip('加入追剧'), findsNothing);
+      // 详情页保留给下载与兜底入口，这里直接挂载它来验证追剧与选集。
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(),
+          home: DetailScreen(
+            drama: FixtureRepository.free,
+            repository: repository,
+            store: local,
+            playerFactory: () => Player(platformPlayer: ScriptedPlayer()),
+            videoBuilder: (controls) => controls,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // README:33：选集默认折叠，展开后才渲染分集按钮。
+      await tester.tap(find.textContaining('选集 ·'));
+      await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('episode-2')), findsOneWidget);
-      await tester.tap(find.byTooltip('加入追剧'));
+      // 追剧入口是下拉菜单（key: follow-status），选中某个状态即加入追剧。
+      await tester.tap(find.byKey(const ValueKey('follow-status')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('在看').last);
       await tester.pumpAndSettle();
       expect(local.isFavorite(FixtureRepository.free.id), isTrue);
       for (final episode in [1, 2]) {
@@ -63,15 +104,14 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.text('继续第 $episode 集'), findsOneWidget);
+        // 详情页底部按钮现在直接显示续播到第几集（原为「继续第 N 集」）。
+        expect(find.text('继续播放 · 第 $episode 集'), findsOneWidget);
         for (final number in [1, 2]) {
-          final button = tester.widget<OutlinedButton>(
+          // 分集按钮已改为 RemoteEpisodeButton，选中态由 current 表达。
+          final button = tester.widget<RemoteEpisodeButton>(
             find.byKey(ValueKey('episode-$number')),
           );
-          expect(
-            button.style?.backgroundColor?.resolve({}),
-            number == episode ? isNotNull : isNull,
-          );
+          expect(button.current, number == episode);
         }
       }
       await local.clearHistory();
@@ -84,7 +124,7 @@ void main() {
   testWidgets('failed catalog can be retried', (tester) async {
     final repository = FixtureRepository()..fail = true;
     await tester.pumpWidget(
-      DuanjuApp(repository: repository, store: await store()),
+      app(repository, store: await store()),
     );
     await tester.pumpAndSettle();
     expect(find.text('暂时无法加载'), findsOneWidget);
@@ -115,7 +155,7 @@ void main() {
       hasMore: true,
     );
     await tester.pumpWidget(
-      DuanjuApp(repository: repository, store: await store()),
+      app(repository, store: await store()),
     );
     await tester.pumpAndSettle();
     expect(find.text('测试短剧'), findsOneWidget);
@@ -141,7 +181,7 @@ void main() {
     final repository = FixtureRepository()..fail = true;
     repository.cachedPages['hongguo'] = CatalogPage([FixtureRepository.free]);
     await tester.pumpWidget(
-      DuanjuApp(repository: repository, store: await store()),
+      app(repository, store: await store()),
     );
     await tester.pumpAndSettle();
     expect(find.text('测试短剧'), findsOneWidget);

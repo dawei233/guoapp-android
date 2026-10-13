@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'app_layout.dart';
 import 'app_bottom_navigation.dart';
@@ -35,9 +36,21 @@ import 'library_updater.dart';
 import 'saved_library.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.repository, required this.store});
+  const HomeScreen({
+    super.key,
+    required this.repository,
+    required this.store,
+    this.playerFactory,
+    this.videoBuilder,
+  });
   final AppRepository repository;
   final LocalStore store;
+
+  /// 测试注入假播放器用；透传给 DetailScreen 再交给 PlayerScreen。
+  @visibleForTesting
+  final Player Function()? playerFactory;
+  @visibleForTesting
+  final Widget Function(Widget controls)? videoBuilder;
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -653,6 +666,8 @@ class _HomeScreenState extends State<HomeScreen> {
             repository: widget.repository,
             store: widget.store,
             downloadOnOpen: true,
+            playerFactory: widget.playerFactory,
+            videoBuilder: widget.videoBuilder,
           ),
         ),
       );
@@ -664,6 +679,8 @@ class _HomeScreenState extends State<HomeScreen> {
         drama: drama,
         repository: widget.repository,
         store: widget.store,
+        playerFactory: widget.playerFactory,
+        videoBuilder: widget.videoBuilder,
       ),
     );
   }

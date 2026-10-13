@@ -131,7 +131,16 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({
         'profiles': jsonEncode([
-          const LocalProfile(id: 'default', name: '管理员', admin: true).toJson(),
+          // 多用户时管理员必须设密码，否则 _readProfiles 会整份判为无效并
+          // 降级成锁定的默认状态（store.locked=true、无可见站源）。
+          const LocalProfile(
+            id: 'default',
+            name: '管理员',
+            admin: true,
+            salt: '11111111111111111111111111111111',
+            pinHash:
+                'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          ).toJson(),
           const LocalProfile(
             id: 'viewer',
             name: '只看红果',

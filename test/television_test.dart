@@ -138,14 +138,12 @@ void main() {
         await tester.pumpAndSettle();
         await press(tester, LogicalKeyboardKey.select);
         expect(repository.detailCalls, 1);
-        expect(find.byKey(const ValueKey('start-play')), findsOneWidget);
-        focusRemote(tester, find.byKey(const ValueKey('episode-1')));
-        await tester.pumpAndSettle();
-        await press(tester, LogicalKeyboardKey.select);
+        // README:33：普通点剧直接进入播放，不再经过详情页，所以
+        // start-play 与选集网格都不出现；VIP 确认弹窗仍在
+        // （playback_launch_screen 的直连播放路径同样会拦 VIP 集）。
         expect(find.text('这是一集 VIP 内容'), findsOneWidget);
         await press(tester, LogicalKeyboardKey.goBack);
         expect(find.text('这是一集 VIP 内容'), findsNothing);
-        expect(FocusManager.instance.primaryFocus?.debugLabel, 'remote-1');
         await press(tester, LogicalKeyboardKey.escape);
         expect(
           FocusManager.instance.primaryFocus?.debugLabel,
@@ -191,6 +189,9 @@ void main() {
         await press(tester, LogicalKeyboardKey.arrowDown);
       }
       expect(FocusManager.instance.primaryFocus?.debugLabel, 'remote-58');
+      // 末行首次按下方向下键只把列表滚到底（RemoteGrid 返回 handled 且不移
+      // 焦点），第二次才交给焦点遍历进入 footer 的「加载更多」。
+      await press(tester, LogicalKeyboardKey.arrowDown);
       await press(tester, LogicalKeyboardKey.arrowDown);
       await press(tester, LogicalKeyboardKey.select);
       expect(loaded, 1);

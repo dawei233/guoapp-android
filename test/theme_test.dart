@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:duanju_app/app_bottom_navigation.dart';
 import 'package:duanju_app/app_theme.dart';
+import 'package:duanju_app/core_bridge.dart';
 import 'package:duanju_app/home_screen.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/main.dart';
@@ -19,6 +20,15 @@ import 'player_fixtures.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  // DuanjuApp 会一路构造到 PlayerScreen；测试环境必须注入假播放器，
+  // 否则会创建 media_kit 原生播放器（需要 libmpv，测试环境没有）。
+  DuanjuApp app(AppRepository repository, {LocalStore? store}) => DuanjuApp(
+    repository: repository,
+    store: store,
+    playerFactory: () => Player(platformPlayer: ScriptedPlayer()),
+    videoBuilder: (controls) => controls,
+  );
 
   Future<LocalStore> localStore() async {
     SharedPreferences.setMockInitialValues({});
@@ -67,14 +77,14 @@ void main() {
       addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
       final repository = FixtureRepository();
       tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
-      await tester.pumpWidget(DuanjuApp(repository: repository));
+      await tester.pumpWidget(app(repository));
       await tester.pump();
       expect(
         tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
         ThemeMode.system,
       );
       final store = await localStore();
-      await tester.pumpWidget(DuanjuApp(repository: repository, store: store));
+      await tester.pumpWidget(app(repository, store: store));
       await tester.pumpAndSettle();
       for (final brightness in [Brightness.dark, Brightness.light]) {
         tester.platformDispatcher.platformBrightnessTestValue = brightness;
@@ -102,11 +112,12 @@ void main() {
     phone(tester);
     final store = await localStore();
     final repository = FixtureRepository();
-    await tester.pumpWidget(DuanjuApp(repository: repository, store: store));
+    await tester.pumpWidget(app(repository, store: store));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('bottom-nav-1')));
     await tester.pumpAndSettle();
-    expect(find.text('我的追剧'), findsOneWidget);
+    // 标题实际渲染为「我的追剧 · N」，用精确匹配永远命中不到。
+    expect(find.textContaining('我的追剧'), findsOneWidget);
     await tester.tap(find.byTooltip('更多'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('设置与备份'));
@@ -130,7 +141,8 @@ void main() {
     );
     await tester.tap(find.byType(BackButton).last);
     await tester.pumpAndSettle();
-    expect(find.text('我的追剧'), findsOneWidget);
+    // 标题实际渲染为「我的追剧 · N」，用精确匹配永远命中不到。
+    expect(find.textContaining('我的追剧'), findsOneWidget);
     expect(
       tester
           .widget<AppBottomNavigation>(find.byType(AppBottomNavigation))
@@ -152,7 +164,8 @@ void main() {
       Brightness.light,
     );
     expect(repository.requests.length, requests);
-    expect(find.text('我的追剧'), findsOneWidget);
+    // 标题实际渲染为「我的追剧 · N」，用精确匹配永远命中不到。
+    expect(find.textContaining('我的追剧'), findsOneWidget);
     tester.platformDispatcher.clearPlatformBrightnessTestValue();
     await tester.pumpWidget(const SizedBox.shrink());
     store.dispose();

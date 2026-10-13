@@ -148,6 +148,9 @@ void main() {
         'tv-player-episodes',
       );
       expect(repository.active.length, 1);
+      // 控制条上的顺序是 播放 → 选集 → 播放日记 → 播放设置（倍速所在面板），
+      // 所以从「选集」出发要按两次右键才到「播放设置」。
+      await press(tester, LogicalKeyboardKey.arrowRight);
       await press(tester, LogicalKeyboardKey.arrowRight);
       await press(tester, LogicalKeyboardKey.select);
       expect(find.text('倍速'), findsOneWidget);

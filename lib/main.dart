@@ -200,6 +200,8 @@ class DuanjuApp extends StatelessWidget {
     this.television = false,
     this.version = appVersion,
     this.navigatorKey,
+    this.playerFactory,
+    this.videoBuilder,
   });
   final AppRepository repository;
   final LocalStore? store;
@@ -208,6 +210,12 @@ class DuanjuApp extends StatelessWidget {
   final bool television;
   final String version;
   final GlobalKey<NavigatorState>? navigatorKey;
+
+  /// 测试注入假播放器用；逐层透传到 PlayerScreen。真机为 null，由 media_kit 创建。
+  @visibleForTesting
+  final Player Function()? playerFactory;
+  @visibleForTesting
+  final Widget Function(Widget controls)? videoBuilder;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -269,6 +277,8 @@ class DuanjuApp extends StatelessWidget {
                   ),
                   repository: repository,
                   store: store!,
+                  playerFactory: playerFactory,
+                  videoBuilder: videoBuilder,
                 )
         : Scaffold(
             body: Center(
