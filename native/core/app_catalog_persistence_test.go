@@ -43,6 +43,21 @@ func nativeHongguoResponse(request *http.Request, next int, more bool, session s
 	return sourceFixtureResponse(request, http.StatusOK, string(body))
 }
 
+// nativeFixturePageLimit 是这些用例使用的每分类翻页上限。
+//
+// 夹具对每一页都回 has_more=true，翻页只能靠 MaxPagesPerSort 终止；若沿用产品
+// 默认值 50，单次 catalog 会打满 50 页 × 3 个分类，这些按小上限写下的调用次数
+// 与 offsets 期望就永远对不上。首次创建与重建引擎都必须用同一上限。
+const nativeFixturePageLimit = 1
+
+// catalogFixtureEngine 建一个翻页上限固定的引擎，供目录/游标用例使用。
+func catalogFixtureEngine(t *testing.T, transport sourceFixtureTransport) *nativeEngine {
+	t.Helper()
+	engine := sourceFixtureEngine(t, transport)
+	engine.downloader.cfg.MaxPagesPerSort = nativeFixturePageLimit
+	return engine
+}
+
 func reopenCatalogEngine(t *testing.T, directory string, transport sourceFixtureTransport) *nativeEngine {
 	t.Helper()
 	engine, err := newNativeEngine(directory)
@@ -53,6 +68,7 @@ func reopenCatalogEngine(t *testing.T, directory string, transport sourceFixture
 	engine.downloader.client.Transport = transport
 	engine.downloader.limiter = newRequestLimiter(3, 0)
 	engine.downloader.cfg.Retries = 1
+	engine.downloader.cfg.MaxPagesPerSort = nativeFixturePageLimit
 	return engine
 }
 
@@ -75,7 +91,7 @@ func TestNativeHongguoCursorRestartsPerCatalog(t *testing.T) {
 		return nativeHongguoResponse(request, payload.Offset+18, true, "fixture-"+payload.Scene,
 			strconv.Itoa(base+position+1), strconv.Itoa(base+position+2)), nil
 	})
-	engine := sourceFixtureEngine(t, transport)
+	engine := catalogFixtureEngine(t, transport)
 	for _, input := range []nativeInput{
 		{Source: sourceHongguo, Page: 1},
 		{Source: sourceHongguo, Category: "short_play", Page: 1},
@@ -153,7 +169,7 @@ func TestNativeHongguoCursorRecoversSessionsAfterRestart(t *testing.T) {
 				}
 				return nativeHongguoResponse(request, 36, true, "new-session", "700002", "700003"), nil
 			})
-			engine := sourceFixtureEngine(t, transport)
+			engine := catalogFixtureEngine(t, transport)
 			input := nativeInput{Source: sourceHongguo, Category: "ai_series", Page: 1}
 			if result, err := engine.nativeCatalog(context.Background(), input); err != nil || result.Warning != "" {
 				t.Fatal(err, result.Warning)
@@ -200,7 +216,7 @@ func TestNativeHongguoStalledCursorKeepsPartialItems(t *testing.T) {
 		}
 		return nativeHongguoResponse(request, 18, true, "fixture", "700002"), nil
 	})
-	engine := sourceFixtureEngine(t, transport)
+	engine := catalogFixtureEngine(t, transport)
 	input := nativeInput{Source: sourceHongguo, Category: "ai_series", Page: 1}
 	if _, err := engine.nativeCatalog(context.Background(), input); err != nil {
 		t.Fatal(err)
@@ -263,7 +279,7 @@ func TestNativeCatalogSaveFailureRetriesWithoutAdvancing(t *testing.T) {
 		return nativeHongguoResponse(request, payload.Offset+18, true, "fixture",
 			strconv.Itoa(1001+position), strconv.Itoa(1002+position)), nil
 	})
-	engine := sourceFixtureEngine(t, transport)
+	engine := catalogFixtureEngine(t, transport)
 	input := nativeInput{Source: sourceHongguo, Category: "short_play", Page: 1}
 	if _, err := engine.nativeCatalog(context.Background(), input); err != nil {
 		t.Fatal(err)
@@ -349,10 +365,16 @@ func TestNativeCatalogSizeLimitPreservesPreviousFile(t *testing.T) {
 
 func TestNativeCatalogMetadataSaveExcludesInFlightCursor(t *testing.T) {
 	paused, release := make(chan struct{}), make(chan struct{})
+	// 这个 checkpoint 会被命中不止一次（重启后同一个 offset 18 会再次请求）。
+	// 无条件 close(paused) 会在第二次命中时 panic: close of closed channel；
+	// 该 panic 发生在测试进程层，会连同后面同批的用例一起中止。
+	var pausedOnce atomic.Bool
 	transport := sourceFixtureTransport(func(request *http.Request) (*http.Response, error) {
 		payload := nativeHongguoRequestForTest(t, request)
 		if payload.Offset == 18 && payload.Scene == "comic_series" {
-			close(paused)
+			if pausedOnce.CompareAndSwap(false, true) {
+				close(paused)
+			}
 			select {
 			case <-release:
 			case <-request.Context().Done():
@@ -362,7 +384,7 @@ func TestNativeCatalogMetadataSaveExcludesInFlightCursor(t *testing.T) {
 		base := map[string]int{"default": 1000, "comic_series": 2000, "ai_series": 3000}[payload.Scene]
 		return nativeHongguoResponse(request, payload.Offset+18, true, "fixture", strconv.Itoa(base+payload.Offset)), nil
 	})
-	engine := sourceFixtureEngine(t, transport)
+	engine := catalogFixtureEngine(t, transport)
 	if _, err := engine.nativeCatalog(context.Background(), nativeInput{Source: sourceHongguo, Page: 1}); err != nil {
 		t.Fatal(err)
 	}

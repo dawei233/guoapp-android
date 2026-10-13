@@ -134,7 +134,13 @@ func TestRankingCacheAndStaleRecovery(t *testing.T) {
 		if fail.Load() {
 			return rankingHTTPResponse(request, 503, "temporarily unavailable"), nil
 		}
+		// 第 1 页的请求不带 ?page= 参数（见 fetchHongguoRankingPage：只有 page>1 才追加），
+		// 所以缺省必须按第 1 页处理，否则 fixture 会以 page=0 生成 rank 1,3，
+		// 与 parser 对第 1 页的 rank 1,2 期望不符，整条用例在这里就断了。
 		page, _ := strconv.Atoi(request.URL.Query().Get("page"))
+		if page < 1 {
+			page = 1
+		}
 		return rankingHTTPResponse(request, 200, rankingFixture(board, page, rankingRows(page))), nil
 	})
 	ctx := context.Background()
