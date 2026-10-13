@@ -121,6 +121,15 @@ func cloneDanmakuPage(page hongguoDanmakuPage) hongguoDanmakuPage {
 	return page
 }
 
+// danmakuIdentity 是弹幕的内容身份：同一时间点上的同一句话视为同一条。
+//
+// 上游接口按游标分批返回子集，同一条弹幕会在不同批次里带着不同的 comment_id
+// 再次出现（参考实现实测：同一集几十秒内会给出 71~104 条不同结果）。因此跨批次
+// 去重不能依赖 id，必须按时间 + 文本判定。
+func danmakuIdentity(positionMS int64, text string) string {
+	return strconv.FormatInt(positionMS, 10) + "|" + text
+}
+
 func parseHongguoDanmaku(result map[string]any, videoID string, start, duration int64) (hongguoDanmakuPage, error) {
 	data := nestedMap(result, "data")
 	rows, valid := data["data_list"].([]any)
@@ -136,6 +145,7 @@ func parseHongguoDanmaku(result map[string]any, videoID string, start, duration 
 		page.Total = cursor.Total
 	}
 	seen := map[string]bool{}
+	seenText := map[string]bool{}
 	for _, raw := range rows {
 		row, _ := raw.(map[string]any)
 		comment := nestedMap(row, "comment")
@@ -156,6 +166,13 @@ func parseHongguoDanmaku(result map[string]any, videoID string, start, duration 
 		}
 		if runes := []rune(text); len(runes) > 180 {
 			text = string(runes[:180]) + "…"
+		}
+		// 上游对同一条弹幕会在不同批次里分配不同的 comment_id，仅按 id 去重会把
+		// 同一句话重复收进来。以时间 + 文本为去重键，与已验证的参考实现一致。
+		if key := danmakuIdentity(position, text); seenText[key] {
+			continue
+		} else {
+			seenText[key] = true
 		}
 		seen[id] = true
 		page.Items = append(page.Items, hongguoDanmakuItem{ID: id, Text: text, TimeMS: position})

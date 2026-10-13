@@ -23,12 +23,16 @@ List<DanmakuFlight> planDanmaku(
   final lanes = List<DanmakuFlight?>.filled(rows.clamp(1, 4), null);
   final sorted = items.toList()..sort((a, b) => a.timeMs.compareTo(b.timeMs));
   final seen = <String>{};
+  final seenIds = <String>{};
   final flights = <DanmakuFlight>[];
   for (final item in sorted) {
     if (item.id.isEmpty ||
         item.text.trim().isEmpty ||
         item.timeMs < 0 ||
-        !seen.add(item.id)) {
+        !seen.add(item.identity) ||
+        // 渲染层用 id 作为 widget key，同一 id 出现两次会触发重复 key 崩溃；
+        // 内容去重已在上一步完成，这里只保证 key 唯一。
+        !seenIds.add(item.id)) {
       continue;
     }
     if (flights.reversed

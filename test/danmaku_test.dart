@@ -306,6 +306,104 @@ void main() {
     expect(repository.danmakuCalls.length, 25);
   });
 
+  test('one batch repeats the same content with different ids and it collapses', () async {
+    // 上游同一次响应里会把同一条弹幕以不同的 comment_id 重复给出。
+    // 只按 id 去重会让同一句话重复上屏（用户反馈的"大量重复"）。
+    final repository = DanmakuFixtureRepository();
+    repository.response = (request) => DanmakuPage(
+      episodeId: request.plan.danmakuId,
+      startMs: request.startMs,
+      nextMs: request.startMs + danmakuWindowMs,
+      items: [
+        DanmakuItem(
+          id: 'batch-a',
+          text: '重复的一句话',
+          timeMs: request.startMs,
+        ),
+        DanmakuItem(
+          id: 'batch-b',
+          text: '重复的一句话',
+          timeMs: request.startMs,
+        ),
+        DanmakuItem(
+          id: 'batch-c',
+          text: '重复的一句话',
+          timeMs: request.startMs,
+        ),
+        DanmakuItem(
+          id: 'batch-d',
+          text: '另一句话',
+          timeMs: request.startMs,
+        ),
+      ],
+    );
+    final controller = DanmakuController(repository)..setPlan(danmakuPlan);
+    addTearDown(controller.dispose);
+    updateDanmaku(controller, playing: false);
+    await flushDanmaku();
+    expect(repository.danmakuCalls, isNotEmpty);
+    expect(controller.items.where((item) => item.text == '重复的一句话').length, 1);
+    expect(controller.items.where((item) => item.text == '另一句话').length, 1);
+  });
+
+  test('the same content at different times stays distinct', () async {
+    // 内容去重只针对"同一时间点的同一句话"，不同时间点的相同文本必须保留。
+    final repository = DanmakuFixtureRepository();
+    repository.response = (request) => DanmakuPage(
+      episodeId: request.plan.danmakuId,
+      startMs: request.startMs,
+      nextMs: request.startMs + danmakuWindowMs,
+      items: [
+        DanmakuItem(id: 'a', text: '同样的话', timeMs: request.startMs),
+        DanmakuItem(id: 'b', text: '同样的话', timeMs: request.startMs + 1000),
+      ],
+    );
+    final controller = DanmakuController(repository)..setPlan(danmakuPlan);
+    addTearDown(controller.dispose);
+    updateDanmaku(controller, playing: false);
+    await flushDanmaku();
+    expect(controller.items.where((item) => item.text == '同样的话').length, 2);
+  });
+
+  test('page parsing collapses repeated content from one batch', () {
+    final page = DanmakuPage.fromJson(
+      <String, dynamic>{
+        'episodeId': '1001',
+        'startMs': 0,
+        'nextMs': 30000,
+        'items': [
+          {'id': 'one', 'text': '重复内容', 'timeMs': 1200},
+          {'id': 'two', 'text': '重复内容', 'timeMs': 1200},
+          {'id': 'three', 'text': '另一条', 'timeMs': 1200},
+        ],
+      },
+      episodeId: '1001',
+      startMs: 0,
+      durationMs: 180000,
+    );
+    expect(page.items.length, 2);
+    expect(page.items.first.id, 'one');
+  });
+
+  test('planDanmaku keeps widget keys unique while collapsing duplicate content', () {
+    // 内容相同但 id 不同的两条会被内容去重；id 重复的两条必须被丢掉，
+    // 否则渲染层的 ValueKey(item.id) 会撞车。
+    final flights = planDanmaku(
+      const [
+        DanmakuItem(id: 'a', text: '同一句话', timeMs: 0),
+        DanmakuItem(id: 'b', text: '同一句话', timeMs: 0),
+        DanmakuItem(id: 'c', text: '另一句话', timeMs: 0),
+        DanmakuItem(id: 'c', text: '第三句话', timeMs: 0),
+      ],
+      width: 500,
+      rows: 4,
+      measure: (text) => text.length * 18,
+    );
+    final ids = flights.map((flight) => flight.item.id).toList();
+    expect(ids.toSet().length, ids.length);
+    expect(flights.where((f) => f.text == '同一句话').length, 1);
+  });
+
   test(
     'lane scheduling bounds density and avoids collisions between different text widths',
     () {

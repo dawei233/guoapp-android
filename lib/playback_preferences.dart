@@ -9,6 +9,7 @@ class PlaybackPreferences {
     this.autoAdvance = true,
     this.danmaku = true,
     this.preload = true,
+    this.volume = 1,
     this.enhancement = const VideoEnhancementPreferences(),
   });
 
@@ -17,6 +18,9 @@ class PlaybackPreferences {
   final bool autoAdvance;
   final bool danmaku;
   final bool preload;
+
+  /// 系统媒体音量，0.0~1.0。负值表示"尚未记录"，启动时沿用系统当前值。
+  final double volume;
   final VideoEnhancementPreferences enhancement;
 
   PlaybackPreferences copyWith({
@@ -25,6 +29,7 @@ class PlaybackPreferences {
     bool? autoAdvance,
     bool? danmaku,
     bool? preload,
+    double? volume,
     VideoEnhancementPreferences? enhancement,
   }) => PlaybackPreferences(
     speed: speed ?? this.speed,
@@ -32,6 +37,7 @@ class PlaybackPreferences {
     autoAdvance: autoAdvance ?? this.autoAdvance,
     danmaku: danmaku ?? this.danmaku,
     preload: preload ?? this.preload,
+    volume: volume ?? this.volume,
     enhancement: enhancement ?? this.enhancement,
   );
 
@@ -41,6 +47,7 @@ class PlaybackPreferences {
     'autoAdvance': autoAdvance,
     'danmaku': danmaku,
     'preload': preload,
+    'volume': volume,
     'enhancement': enhancement.toJson(),
   };
 
@@ -50,6 +57,9 @@ class PlaybackPreferences {
     final autoAdvance = value['autoAdvance'] as bool? ?? true;
     final danmaku = value['danmaku'] as bool? ?? true;
     final preload = value['preload'] as bool? ?? true;
+    // 负值代表"没有记录过"，由启动流程决定是否套用；其余值必须落在合法区间。
+    final rawVolume = (value['volume'] as num?)?.toDouble() ?? -1;
+    final volume = rawVolume < 0 ? -1.0 : rawVolume.clamp(0.0, 1.0);
     if (!playbackSpeeds.contains(speed) || quality < 0 || quality > 4320) {
       throw const FormatException('播放偏好无效');
     }
@@ -59,6 +69,7 @@ class PlaybackPreferences {
       autoAdvance: autoAdvance,
       danmaku: danmaku,
       preload: preload,
+      volume: volume,
       enhancement: VideoEnhancementPreferences.fromJson(value['enhancement']),
     );
   }

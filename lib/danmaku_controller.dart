@@ -270,12 +270,14 @@ class DanmakuController extends ChangeNotifier {
   }
 
   void _rebuildItems() {
+    // 按内容身份去重：上游会在不同批次里给同一条弹幕不同的 id，仅按 id 去重
+    // 会让同一句话在窗口重叠处重复出现（详见 danmaku_models.dart 的 identity）。
     final unique = <String, DanmakuItem>{};
     final pages = _pages.values.toList()
       ..sort((a, b) => a.startMs.compareTo(b.startMs));
     for (final page in pages) {
       for (final item in page.items) {
-        unique.putIfAbsent(item.id, () => item);
+        unique.putIfAbsent(item.identity, () => item);
       }
     }
     final sorted = unique.values.toList()

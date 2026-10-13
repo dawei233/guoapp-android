@@ -29,6 +29,7 @@ class PlayerInteractions extends ChangeNotifier {
     required this.onFullscreen,
     required this.onEpisode,
     this.onSeek,
+    this.onVolumeChanged,
   }) {
     _playing = player.stream.playing.listen((playing) {
       if (!playing) cancel();
@@ -36,6 +37,14 @@ class PlayerInteractions extends ChangeNotifier {
     AppDevice.getBrightness().then((val) {
       if (!_disposed) {
         _brightness = val;
+        notifyListeners();
+      }
+    }).catchError((_) {});
+    AppDevice.getVolume().then((val) {
+      // 构造期间的异步读取可能晚于外部恢复的已存音量；一旦有显式写入就以它为准，
+      // 否则会把刚恢复的音量盖回系统旧值。
+      if (!_disposed && !_volumePinned) {
+        _volume = val;
         notifyListeners();
       }
     }).catchError((_) {});
@@ -48,6 +57,8 @@ class PlayerInteractions extends ChangeNotifier {
   final VoidCallback onFullscreen;
   final String Function(int direction) onEpisode;
   final Future<void> Function(Duration)? onSeek;
+  /// 音量变化后的回调，用于把新音量持久化。参数是 0.0~1.0 的系统媒体音量。
+  final Future<void> Function(double volume)? onVolumeChanged;
   late final StreamSubscription<bool> _playing;
   Timer? _holdTimer;
   Timer? _hintTimer;
@@ -65,14 +76,18 @@ class PlayerInteractions extends ChangeNotifier {
   bool _keyboardHold = false;
   bool _cancelUntilRelease = false;
   bool _disposed = false;
-  double _unmutedVolume = 100;
+  double _unmutedVolume = 1.0;
   String _feedback = '';
   DateTime _ignoreTapUntil = DateTime(2000);
   SwipeAction _swipeAction = SwipeAction.none;
   GestureHudState _hudState = const GestureHudState();
   double _brightness = 0.5;
   double _initialBrightness = 0.5;
-  double _initialVolume = 0;
+  double _volume = 1.0;
+  double _initialVolume = 1.0;
+  bool _volumePinned = false;
+  int _volumeWrite = 0;
+  Timer? _persistTimer;
   bool _sideLocked = false;
   double _sideTrigger = 30;
   double _viewWidth = 0.0;
@@ -83,11 +98,83 @@ class PlayerInteractions extends ChangeNotifier {
   double get brightness => _brightness;
   bool get isBrightnessActive => _hudState.type == SwipeAction.brightness;
 
+  /// 系统媒体音量，0.0~1.0。控件与手势都以它为准，不再读播放器的软件增益 ——
+  /// media_kit 的 setVolume 只缩放内部增益，音量上限会被系统音量锁死。
+  double get volume => _volume;
+
   void setBrightnessDirect(double value) {
     if (_disposed) return;
     _brightness = value.clamp(0.01, 1.0);
     AppDevice.setBrightness(_brightness);
     _showHud(SwipeAction.brightness, _brightness);
+  }
+
+  /// 只同步控件显示的系统音量，不回写系统。用于"用户从未在本应用调过音量"的场景：
+  /// 打开播放器不应该顺手改掉手机的音量档位。
+  void adoptVolume(double value) {
+    if (_disposed) return;
+    _volumePinned = true;
+    _volume = value.clamp(0.0, 1.0);
+    notifyListeners();
+  }
+
+  /// 音量唯一的写入出口：写系统媒体音量，并把实际生效值回填给控件。
+  /// 所有调整入口（手势、滑块、静音键、快捷键）都必须走这里，避免各自为政。
+  void setVolumeDirect(double value) {
+    if (_disposed) return;
+    _volumePinned = true;
+    final requested = value.clamp(0.0, 1.0);
+    _volume = requested;
+    notifyListeners();
+    final ticket = ++_volumeWrite;
+    unawaited(
+      AppDevice.setVolume(requested).then((applied) {
+        // 拖动会连续写入，系统响应可能乱序回来；只认最后一次请求的回填，
+        // 否则控件数值会被过期的响应拽回去。
+        if (_disposed || ticket != _volumeWrite) return;
+        // 系统按档位量化，回填实际值，避免显示与听感不一致。
+        _volume = applied;
+        notifyListeners();
+        _schedulePersist(applied);
+      }),
+    );
+  }
+
+  /// 拖动过程中每帧都会写系统音量，但没必要每帧都落盘。
+  /// 停止调整后再持久化，避免高频写存储。
+  void _schedulePersist(double volume) {
+    _persistTimer?.cancel();
+    _persistTimer = Timer(const Duration(milliseconds: 400), () {
+      _persistTimer = null;
+      if (_disposed) return;
+      unawaited(onVolumeChanged?.call(_volume) ?? Future<void>.value());
+    });
+  }
+
+  /// 立即持久化（用于收尾），跳过防抖等待。
+  void flushVolume() {
+    if (_disposed || _persistTimer == null) return;
+    _persistTimer!.cancel();
+    _persistTimer = null;
+    unawaited(onVolumeChanged?.call(_volume) ?? Future<void>.value());
+  }
+
+  /// 用增量调整音量（键盘/遥控的 ±），并给出文字反馈。
+  void changeVolume(double delta) {
+    if (!available()) return;
+    final target = (_volume + delta / 100.0).clamp(0.0, 1.0);
+    setVolumeDirect(target);
+    if (target > 0) _unmutedVolume = target;
+    hint(target == 0 ? '已静音' : '音量 ${(target * 100).round()}%');
+  }
+
+  void toggleMute() {
+    if (!available()) return;
+    final current = _volume;
+    if (current > 0) _unmutedVolume = current;
+    final target = current > 0 ? 0.0 : _unmutedVolume;
+    setVolumeDirect(target);
+    hint(target == 0 ? '已静音' : '音量 ${(target * 100).round()}%');
   }
 
   void dismissBrightnessHud() {
@@ -212,7 +299,7 @@ class PlayerInteractions extends ChangeNotifier {
         });
       } else if (event.localPosition.dx > width * 0.8) {
         _swipeAction = SwipeAction.volume;
-        _initialVolume = player.state.volume;
+        _initialVolume = _volume;
       } else {
         _swipeAction = SwipeAction.episode;
       }
@@ -245,9 +332,9 @@ class PlayerInteractions extends ChangeNotifier {
       AppDevice.setBrightness(_brightness);
       _showHud(SwipeAction.brightness, _brightness);
     } else if (_swipeAction == SwipeAction.volume) {
-      final volume = (_initialVolume + deltaRatio * 100).clamp(0.0, 100.0);
-      unawaited(player.setVolume(volume));
-      _showHud(SwipeAction.volume, volume / 100);
+      final volume = (_initialVolume + deltaRatio).clamp(0.0, 1.0);
+      setVolumeDirect(volume);
+      _showHud(SwipeAction.volume, volume);
     }
   }
 
@@ -271,6 +358,8 @@ class PlayerInteractions extends ChangeNotifier {
       if (available()) hint(onEpisode(delta.dy < 0 ? 1 : -1));
     } else if (_swipeAction == SwipeAction.brightness ||
         _swipeAction == SwipeAction.volume) {
+      // 滑动结束立即落盘，不等防抖窗口。
+      if (_swipeAction == SwipeAction.volume) flushVolume();
       _scheduleDismissHud();
     }
 
@@ -312,23 +401,6 @@ class PlayerInteractions extends ChangeNotifier {
         .clamp(0, player.state.duration.inMilliseconds);
     unawaited((onSeek ?? player.seek)(Duration(milliseconds: target)));
     hint('${seconds > 0 ? '快进至' : '后退至'} ${formatPosition(target / 1000)}');
-  }
-
-  void changeVolume(double delta) {
-    if (!available()) return;
-    final volume = (player.state.volume + delta).clamp(0.0, 100.0);
-    unawaited(player.setVolume(volume));
-    if (volume > 0) _unmutedVolume = volume;
-    hint(volume == 0 ? '已静音' : '音量 ${volume.round()}%');
-  }
-
-  void toggleMute() {
-    if (!available()) return;
-    final current = player.state.volume;
-    if (current > 0) _unmutedVolume = current;
-    final target = current > 0 ? 0.0 : _unmutedVolume;
-    unawaited(player.setVolume(target));
-    hint(target == 0 ? '已静音' : '音量 ${target.round()}%');
   }
 
   KeyEventResult key(KeyEvent event) {
@@ -384,6 +456,13 @@ class PlayerInteractions extends ChangeNotifier {
 
   @override
   void dispose() {
+    // 先把还在防抖窗口里的音量落盘，再置 _disposed —— 顺序反了 flushVolume
+    // 会直接返回，用户最后一次调整就丢了。
+    if (_persistTimer != null) {
+      _persistTimer!.cancel();
+      _persistTimer = null;
+      unawaited(onVolumeChanged?.call(_volume) ?? Future<void>.value());
+    }
     _disposed = true;
     _holdTimer?.cancel();
     _hintTimer?.cancel();

@@ -100,6 +100,31 @@ class AppDevice {
       await channel.invokeMethod('resetBrightness');
     } catch (_) {}
   }
+
+  /// 读取系统媒体音量，归一化到 0.0~1.0。非 Android 或读取失败按满音量处理。
+  static Future<double> getVolume() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return 1.0;
+    try {
+      final value = await channel.invokeMethod<double>('getVolume');
+      return (value ?? 1.0).clamp(0.0, 1.0);
+    } catch (_) {
+      return 1.0;
+    }
+  }
+
+  /// 写入系统媒体音量并返回实际生效值（系统按档位量化后可能与请求值略有出入）。
+  static Future<double> setVolume(double volume) async {
+    final requested = volume.clamp(0.0, 1.0);
+    if (defaultTargetPlatform != TargetPlatform.android) return requested;
+    try {
+      final applied = await channel.invokeMethod<double>('setVolume', {
+        'volume': requested,
+      });
+      return (applied ?? requested).clamp(0.0, 1.0);
+    } catch (_) {
+      return requested;
+    }
+  }
 }
 
 class AppLayout extends InheritedWidget {

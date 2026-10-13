@@ -155,7 +155,10 @@ class _PlayerControlsState extends State<PlayerControls> {
   }
 
   void _interactionChanged() {
-    if (mounted && widget.interactions.feedback.isNotEmpty) _show();
+    if (!mounted) return;
+    if (widget.interactions.feedback.isNotEmpty) _show();
+    // 音量是 interactions 持有的状态，必须重绘控件，否则条上的数值会滞后。
+    setState(() {});
   }
 
   void _scheduleHide() {
@@ -300,7 +303,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                             _sideDanmakuControl(),
                             _bottomControls(
                               constraints: constraints,
-                              volume: state.volume,
+                              volume: widget.interactions.volume * 100,
                               duration: duration,
                               position: position,
                               buffered: buffered,
@@ -890,7 +893,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                             onPressed: () {
                               final next = volume == 0 ? 100.0 : 0.0;
                               setState(() => volume = next);
-                              unawaited(widget.player.setVolume(next));
+                              widget.interactions.setVolumeDirect(next / 100);
                             },
                             icon: Icon(
                               volume == 0
@@ -921,7 +924,9 @@ class _PlayerControlsState extends State<PlayerControls> {
                                   divisions: 20,
                                   onChanged: (value) {
                                     setState(() => volume = value);
-                                    unawaited(widget.player.setVolume(value));
+                                    widget.interactions.setVolumeDirect(
+                                      value / 100,
+                                    );
                                   },
                                 ),
                               ),

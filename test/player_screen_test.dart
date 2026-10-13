@@ -252,13 +252,14 @@ void main() {
     }
   });
 
-  testWidgets('right-edge swipe adjusts volume without touching brightness', (
+  testWidgets('right-edge swipe adjusts system volume without touching brightness', (
     tester,
   ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     var brightnessWrites = 0;
+    var volumeWrites = <double>[];
     messenger.setMockMethodCallHandler(AppDevice.channel, (call) async {
       switch (call.method) {
         case 'pictureInPictureStatus':
@@ -268,6 +269,12 @@ void main() {
         case 'setBrightness':
           brightnessWrites += 1;
           return null;
+        case 'getVolume':
+          return 1.0;
+        case 'setVolume':
+          final value = (call.arguments as Map)['volume'] as double;
+          volumeWrites.add(value);
+          return value;
       }
       return null;
     });
@@ -288,7 +295,9 @@ void main() {
       await tester.pump();
       await gesture.up();
       await tester.pump();
-      expect(player.state.volume, lessThan(100));
+      // 音量走系统媒体音量；播放器的软件增益不再被应用层驱动。
+      expect(volumeWrites, isNotEmpty);
+      expect(volumeWrites.last, lessThan(1.0));
       expect(brightnessWrites, 0);
       await unmount(tester, player);
     } finally {

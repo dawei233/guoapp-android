@@ -188,6 +188,32 @@ func TestHongguoDanmakuCanceledLoadCanBeRetried(t *testing.T) {
 	}
 }
 
+func TestHongguoDanmakuDeduplicatesAcrossBatchesByContent(t *testing.T) {
+	// 上游按游标分批返回子集，同一条弹幕会在不同批次里带着不同的 comment_id
+	// 再次出现。若只按 id 去重，同一句话会被重复收进来（用户反馈的"大量重复"）。
+	rows := []any{
+		danmakuTestRow(danmakuTestVideo, "batch-a-1", "重复的一句话", 1000),
+		danmakuTestRow(danmakuTestVideo, "batch-b-1", "重复的一句话", 1000),
+		danmakuTestRow(danmakuTestVideo, "batch-c-1", "重复的一句话", 1000),
+		danmakuTestRow(danmakuTestVideo, "batch-a-2", "另一个时间点的同一句话", 2000),
+		danmakuTestRow(danmakuTestVideo, "batch-a-3", "同一时间点的另一句话", 1000),
+	}
+	page, err := parseHongguoDanmaku(danmakuTestResult(30000, rows), danmakuTestVideo, 0, 160000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 3 {
+		t.Fatalf("content duplicates were not collapsed: %+v", page.Items)
+	}
+	// 保留首次出现的 id，时间轴不受影响。
+	if page.Items[0].ID != "batch-a-1" || page.Items[0].TimeMS != 1000 {
+		t.Fatalf("first occurrence must win: %+v", page.Items[0])
+	}
+	if page.Items[1].TimeMS != 1000 || page.Items[2].TimeMS != 2000 {
+		t.Fatalf("distinct content at the same or later time was dropped: %+v", page.Items)
+	}
+}
+
 func TestNativeDanmakuUsesPlaybackIdentityAcrossRoutes(t *testing.T) {
 	var calls atomic.Int32
 	engine := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {

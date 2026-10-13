@@ -11,6 +11,12 @@ class DanmakuItem {
   final String id;
   final String text;
   final int timeMs;
+
+  /// 弹幕的内容身份：同一时间点上的同一句话视为同一条。
+  ///
+  /// 上游按游标分批返回子集，同一条弹幕会在不同批次里带着不同的 id 再次出现，
+  /// 因此跨批次去重不能依赖 id（详见 native/core/ui_playback_danmaku.go 的说明）。
+  String get identity => '$timeMs|$text';
 }
 
 class DanmakuPage {
@@ -60,14 +66,13 @@ class DanmakuPage {
           .replaceAll(RegExp(r'[\x00-\x1f\x7f-\x9f\u2028\u2029]'), ' ')
           .trim();
       if (cleaned.isEmpty) continue;
-      seen.add(id);
-      items.add(
-        DanmakuItem(
-          id: id,
-          text: String.fromCharCodes(cleaned.runes.take(181)),
-          timeMs: time,
-        ),
+      final item = DanmakuItem(
+        id: id,
+        text: String.fromCharCodes(cleaned.runes.take(181)),
+        timeMs: time,
       );
+      if (!seen.add(item.identity)) continue;
+      items.add(item);
     }
     items.sort((a, b) => a.timeMs.compareTo(b.timeMs));
     return DanmakuPage(

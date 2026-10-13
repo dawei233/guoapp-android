@@ -16,6 +16,7 @@ import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Rect
+import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.Uri
 import android.util.Rational
@@ -63,6 +64,30 @@ class MainActivity : FlutterActivity() {
         return remoteNavigation || packageManager.hasSystemFeature(PackageManager.FEATURE_LIVE_TV)
     }
 
+    private fun audioManager(): AudioManager? =
+        getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+
+    /** 当前媒体音量，归一化到 0.0~1.0；读取失败时按满音量处理，避免误把声音压掉。 */
+    private fun currentMediaVolume(): Double {
+        val manager = audioManager() ?: return 1.0
+        val max = manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        if (max <= 0) return 1.0
+        val current = manager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        return (current.toDouble() / max).coerceIn(0.0, 1.0)
+    }
+
+    /** 把 0.0~1.0 映射到系统媒体音量档位并写入；返回写入后的实际归一化值。 */
+    private fun applyMediaVolume(value: Double): Double {
+        val manager = audioManager() ?: return value.coerceIn(0.0, 1.0)
+        val max = manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        if (max <= 0) return value.coerceIn(0.0, 1.0)
+        val level = Math.round(value.coerceIn(0.0, 1.0) * max).toInt().coerceIn(0, max)
+        runCatching {
+            manager.setStreamVolume(AudioManager.STREAM_MUSIC, level, 0)
+        }
+        return level.toDouble() / max
+    }
+
     override fun setRequestedOrientation(requestedOrientation: Int) {
         super.setRequestedOrientation(
             if (televisionMode) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else requestedOrientation
@@ -99,6 +124,8 @@ class MainActivity : FlutterActivity() {
             savedInstanceState.getBoolean("duanju.televisionMode")
         } else isTelevisionDevice()
         super.onCreate(savedInstanceState)
+        // 让硬件音量键直接控制媒体音量，与播放器音量条落在同一路音量上。
+        volumeControlStream = AudioManager.STREAM_MUSIC
         if (televisionMode) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
@@ -202,6 +229,15 @@ class MainActivity : FlutterActivity() {
                             lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
                             window.attributes = lp
                             result.success(true)
+                        }
+                        "getVolume" -> result.success(currentMediaVolume())
+                        "setVolume" -> {
+                            val value = call.argument<Double>("volume")
+                            if (value == null) {
+                                result.error("invalid_arg", "缺少音量数值", null)
+                            } else {
+                                result.success(applyMediaVolume(value))
+                            }
                         }
                         "openExternalPlayer" -> {
                             val url = call.argument<String>("url")

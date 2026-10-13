@@ -149,6 +149,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     autoAdvance: _autoAdvance,
     danmaku: _danmakuEnabled,
     preload: _preloadEnabled,
+    // 音量由 interactions 持有，不是本页的字段；遗漏它会让切换弹幕/倍速时
+    // 把已记录的音量覆盖回默认值。
+    volume: _interactions.volume,
     enhancement: _enhancement.preferences,
   );
   String get _qualityLabel => _plan?.local == true
@@ -225,7 +228,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         unawaited(_play(next));
         return '第 ${widget.detail.episodes[next].number} 集';
       },
+      onVolumeChanged: _persistVolume,
     );
+    _restoreVolume(preferences.volume);
     _playerFocus.addListener(() {
       if (!_playerFocus.hasPrimaryFocus && !_closed) _interactions.cancel();
     });
@@ -367,6 +372,29 @@ class _PlayerScreenState extends State<PlayerScreen>
         );
       }
     });
+  }
+
+  /// 恢复上次的记录音量。没有记录时沿用系统当前值，不擅自改动用户的手机音量。
+  void _restoreVolume(double saved) {
+    if (saved >= 0) {
+      _interactions.setVolumeDirect(saved);
+      return;
+    }
+    // 未记录过：只读取并同步控件显示，不写系统音量 —— 用户没在本应用里调过音量，
+    // 就不该因为打开一个视频而改掉他手机的音量档位。
+    AppDevice.getVolume().then((current) {
+      if (_closed) return;
+      _interactions.adoptVolume(current);
+    }).catchError((Object _) {});
+  }
+
+  /// 音量写入系统后回落到偏好存储，下次开播沿用。写失败不影响本次播放。
+  Future<void> _persistVolume(double volume) async {
+    if (_closed || widget.store.profileEpoch != _profileEpoch) return;
+    final next = widget.store.playbackPreferences.copyWith(volume: volume);
+    try {
+      await widget.store.setPlaybackPreferences(next);
+    } catch (_) {}
   }
 
   void _accessChanged() {
