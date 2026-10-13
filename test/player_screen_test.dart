@@ -280,7 +280,6 @@ void main() {
     try {
       final platform = ScriptedPlayer();
       final player = Player(platformPlayer: platform);
-      addTearDown(player.dispose);
       final interactions = PlayerInteractions(
         player: player,
         available: () => true,
@@ -289,7 +288,6 @@ void main() {
         onFullscreen: () {},
         onEpisode: (_) => '',
       );
-      addTearDown(interactions.dispose);
       interactions.setVolumeDirect(0.4);
       // 通道调用是异步的，多泵几帧等它回来。
       for (var i = 0; i < 8; i++) {
@@ -300,6 +298,9 @@ void main() {
       expect(interactions.volume, closeTo(0.4, 0.001));
       // 调音量不应顺带改亮度。
       expect(brightnessWrites, 0);
+      // dispose 会取消 400ms 落盘防抖计时器，保证不留 pending timer。
+      interactions.dispose();
+      await player.dispose();
     } finally {
       messenger.setMockMethodCallHandler(AppDevice.channel, null);
       debugDefaultTargetPlatformOverride = null;
