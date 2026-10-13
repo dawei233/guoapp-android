@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sync_source import source_files, synchronize
+from sync_version import synchronize_version
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,7 @@ class TaskSnapshot:
     files: int
     total_bytes: int
     archive: Path
+    version: str
 
 
 def create_source_archive(destination, names):
@@ -44,9 +46,10 @@ def finish_task(source, destination, message):
     if destination.is_symlink():
         raise ValueError('同步目标不能是符号链接')
     source, destination = source.resolve(), destination.resolve()
-    selected = source_files(source)
     if not message.strip():
         raise ValueError('请填写本次完成的变更说明')
+    version = synchronize_version(source).version
+    selected = source_files(source)
     if source != destination:
         synchronize(source, destination)
         if synchronize(source, destination, check=True).changed:
@@ -59,6 +62,7 @@ def finish_task(source, destination, message):
         files=len(names),
         total_bytes=sum((destination / name).stat().st_size for name in names),
         archive=archive,
+        version=version,
     )
 
 
@@ -76,6 +80,7 @@ def main():
         print(str(error), file=sys.stderr)
         return 1
     print(f'已同步源码：{result.files} 个文件，{result.total_bytes / 1024:.1f} KB')
+    print('源码版本：' + result.version)
     print('源码目录：' + str(options.destination.resolve()))
     print('源码压缩包：' + str(result.archive.resolve()))
     return 0

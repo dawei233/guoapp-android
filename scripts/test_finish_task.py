@@ -17,6 +17,7 @@ class TaskSnapshotTests(unittest.TestCase):
         for name in REQUIRED_FILES:
             self.write(self.source / name, name)
         self.write(self.source / 'pubspec.yaml', 'name: synthetic_app\nversion: 0.1.3+4\n')
+        self.write(self.source / 'README.md', '说明。当前源码版本：**0.1.2+3**。\n')
         self.destination.mkdir()
 
     def write(self, path, content):
@@ -73,6 +74,14 @@ class TaskSnapshotTests(unittest.TestCase):
             (self.destination / 'lib/main.dart').read_text(encoding='utf-8'),
             'next behavior',
         )
+
+    def test_task_finish_aligns_readme_version_with_pubspec(self):
+        result = finish_task(self.source, self.destination, '对齐版本号')
+        self.assertEqual(result.version, '0.1.3+4')
+        self.assertIn('当前源码版本：**0.1.3+4**',
+                      (self.source / 'README.md').read_text(encoding='utf-8'))
+        self.assertIn('当前源码版本：**0.1.3+4**',
+                      (self.destination / 'README.md').read_text(encoding='utf-8'))
 
     def test_working_in_published_directory_only_creates_archive(self):
         synchronize(self.source, self.destination)
